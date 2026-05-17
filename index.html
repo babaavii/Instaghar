@@ -938,7 +938,7 @@ code{font-family:'JetBrains Mono',monospace}
           <div class="ibox"><div class="il">Shops Affected</div><div class="iv" id="ri-shp">0</div></div>
           <div class="ibox"><div class="il">COD Reduction</div><div class="iv" style="color:var(--orange)" id="ri-cod">₹0</div></div>
           <div class="ibox"><div class="il">Prepaid Refund</div><div class="iv" style="color:var(--red)" id="ri-pre">₹0</div></div>
-          <div class="ibox"><div class="il">Total Deducted</div><div class="iv" style="color:var(--red)" id="ri-ded">₹0</div></div>
+          <div class="ibox"><div class="il">Total Deducted</div><div class="iv" style="color:var(--red)" id="ri-tot">₹0</div></div>
         </div>
       </div>
 
@@ -979,9 +979,7 @@ code{font-family:'JetBrains Mono',monospace}
         <div class="impbar" id="ai-imp" style="display:none">
           <div class="ibox"><div class="il">Items Added</div><div class="iv" id="aii-cnt">0</div></div>
           <div class="ibox"><div class="il">Shops Affected</div><div class="iv" id="aii-shp">0</div></div>
-          <div class="ibox"><div class="il">COD (Collect Extra)</div><div class="iv" style="color:var(--orange)" id="aii-cod">₹0</div></div>
-          <div class="ibox"><div class="il">Prepaid (Credited)</div><div class="iv" style="color:var(--accent)" id="aii-pre">₹0</div></div>
-          <div class="ibox"><div class="il">Total Credited</div><div class="iv" style="color:var(--accent)" id="aii-crd">₹0</div></div>
+          <div class="ibox"><div class="il">Total Credited</div><div class="iv" style="color:var(--accent)" id="aii-tot">₹0</div></div>
         </div>
       </div>
 
@@ -1910,15 +1908,13 @@ function filterAiItems(){
   list.style.display='block';
 }
 
-// close dropdowns on outside click
+// close ai dropdown on outside click
 document.addEventListener('click',function(e){
-  var ai=document.getElementById('ai-item-list');
-  if(ai&&!ai.contains(e.target)&&e.target.id!=='ai-item-search') ai.style.display='none';
-  var rm=document.getElementById('rm-item-list');
-  if(rm&&!rm.contains(e.target)&&e.target.id!=='rm-item-search') rm.style.display='none';
+  var el=document.getElementById('ai-item-list');
+  if(el&&!el.contains(e.target)&&e.target.id!=='ai-item-search') el.style.display='none';
 });
 
-function addItem(){
+function addOrderItem(){
   var shop  = document.getElementById('ai-shop').value.trim();
   var item  = document.getElementById('ai-item-val').value.trim() || document.getElementById('ai-item-search').value.trim();
   var qty   = parseFloat(document.getElementById('ai-qty').value)||1;
@@ -1986,75 +1982,37 @@ function getAdditionsByShop(brand){
 /* ── ITEM REMOVALS ── */
 function initRemovalDropdowns(){
   var canonical={}, brands=[];
+  Object.keys(SD).forEach(function(b){  var k=b.trim().toLowerCase(); if(!canonical[k]){canonical[k]=b.trim();brands.push(b.trim());} });
   Object.keys(INV).forEach(function(b){ var k=b.trim().toLowerCase(); if(!canonical[k]){canonical[k]=b.trim();brands.push(b.trim());} });
-  Object.keys(SD).forEach(function(b){ var k=b.trim().toLowerCase(); if(!canonical[k]){canonical[k]=b.trim();brands.push(b.trim());} });
   brands.sort(function(a,b){return a.toLowerCase().localeCompare(b.toLowerCase());});
   var rs=document.getElementById('rm-shop');
   if(!rs) return; rs.innerHTML='<option value="">— Select shop —</option>';
   brands.forEach(function(b){var o=document.createElement('option');o.value=b;o.textContent=b;rs.appendChild(o);});
-}
-
-function onRmShopChange(){
-  document.getElementById('rm-item-search').value='';
-  document.getElementById('rm-item-val').value='';
-  document.getElementById('rm-price').value='';
-  document.getElementById('rm-disc').value='';
-  document.getElementById('rm-item-list').style.display='none';
-}
-
-function filterRmItems(){
-  var shop = document.getElementById('rm-shop').value;
-  var q    = document.getElementById('rm-item-search').value;
-  var list = document.getElementById('rm-item-list');
-  if(!list) return;
-  // get items for shop
-  var items = [];
-  if(shop){
-    var sdKey=shop;
-    if(!SD[shop]){ Object.keys(SD).forEach(function(k){if(k.trim()===shop)sdKey=k;}); }
-    if(SD[sdKey]&&SD[sdKey].prods){
-      Object.keys(SD[sdKey].prods).forEach(function(p){
-        var pr=SD[sdKey].prods[p];
-        items.push({name:p, pu:pr.pu, du:pr.du||0});
+  rs.onchange=function(){
+    var shop=rs.value;
+    var rp=document.getElementById('rm-prod');
+    if(!rp) return; rp.innerHTML='<option value="">— Select item —</option>';
+    // find matching shop in SD (handles trailing-space variants)
+    var sdKey=shop; if(!SD[shop]){ Object.keys(SD).forEach(function(k){if(k.trim()===shop)sdKey=k;}); }
+    if(shop&&SD[sdKey]){
+      Object.keys(SD[sdKey].prods).sort().forEach(function(p){
+        var o=document.createElement('option');o.value=p;o.textContent=p;rp.appendChild(o);
       });
     }
-    // also check INV
-    if(INV[shop]){
-      Object.keys(INV[shop]).forEach(function(p){
-        if(!items.find(function(x){return x.name===p;})){
-          var pr=INV[shop][p];
-          items.push({name:p, pu:pr.p||0, du:pr.d||0});
-        }
-      });
-    }
-    items.sort(function(a,b){return a.name.localeCompare(b.name);});
-  }
-  var qL = q.toLowerCase().trim();
-  var filtered = qL ? items.filter(function(e){return e.name.toLowerCase().includes(qL);}) : items;
-  filtered = filtered.slice(0,80);
-  if(!filtered.length){ list.style.display='none'; return; }
-  list.innerHTML='';
-  filtered.forEach(function(e){
-    var div=document.createElement('div');
-    div.textContent=e.name+(e.pu?' (₹'+e.pu.toFixed(2)+')':'');
-    div.style.cssText='padding:8px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--g100)';
-    div.onmouseover=function(){this.style.background='var(--g50)';};
-    div.onmouseout=function(){this.style.background='';};
-    div.onclick=function(){
-      document.getElementById('rm-item-search').value=e.name;
-      document.getElementById('rm-item-val').value=e.name;
-      document.getElementById('rm-price').value=e.pu.toFixed(2);
-      document.getElementById('rm-disc').value=e.du.toFixed(2);
-      list.style.display='none';
+    rp.onchange=function(){
+      var prod=rp.value;
+      if(shop&&prod&&SD[sdKey]&&SD[sdKey].prods[prod]){
+        var pr=SD[sdKey].prods[prod];
+        document.getElementById('rm-price').value=pr.pu.toFixed(2);
+        document.getElementById('rm-disc').value=pr.du.toFixed(2);
+      }
     };
-    list.appendChild(div);
-  });
-  list.style.display='block';
+  };
 }
 
 function addRemoval(){
   var shop=document.getElementById('rm-shop').value.trim();
-  var prod=(document.getElementById('rm-item-val').value||document.getElementById('rm-item-search').value).trim();
+  var prod=document.getElementById('rm-prod').value.trim();
   var qty=parseFloat(document.getElementById('rm-qty').value)||1;
   var price=parseFloat(document.getElementById('rm-price').value);
   var disc=parseFloat(document.getElementById('rm-disc').value)||0;
@@ -2065,7 +2023,7 @@ function addRemoval(){
   var netU=price-disc, totalNet=netU*qty;
   REMOVALS.push({id:'rm'+(++RM_CTR),shop:shop,prod:prod,qty:qty,pu:price,du:disc,netU:netU,totalNet:totalNet,type:type});
   document.getElementById('rm-shop').value='';
-  var _rmprod=document.getElementById('rm-item-search'); if(_rmprod) _rmprod.value=''; var _rmval=document.getElementById('rm-item-val'); if(_rmval) _rmval.value='';
+  var _rmprod=document.getElementById('rm-prod'); if(_rmprod) _rmprod.innerHTML='<option value="">— Select item —</option>';
   document.getElementById('rm-qty').value='1';
   document.getElementById('rm-price').value='';
   document.getElementById('rm-disc').value='';
@@ -2236,13 +2194,13 @@ function renderShops(){
         +'<div class="adj-foot"><span>Total credited to shop</span><span style="color:#166634">+₹'+fmt(aiTotal)+'</span></div>'
         +'</div>';
     }
-
-    // commission box
+    // commission box (read-only — manage rates in Settings tab)
     inner+='<div class="commbox">'
-      +'<div class="commrow"><label>My commission %</label>'
-      +'<input type="number" min="0" max="100" step="0.5" value="'+pct+'" id="ci-'+bid+'" oninput="upd(\''+brand.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+"','"+bid+'\')">'
-      +'<span style="font-size:13px;color:var(--g500)">%</span>'
-      +'<span class="commtag">Commission: <strong id="ca-'+bid+'">₹'+fmt(camt)+'</strong></span>'
+      +'<div class="commrow">'
+      +'<label>Commission</label>'
+      +'<span style="font-size:14px;font-weight:600;color:var(--primary)">'+pct+'%</span>'
+      +'<span class="commtag" style="margin-left:auto">Commission: <strong id="ca-'+bid+'">₹'+fmt(camt)+'</strong></span>'
+      +'<a href="#" onclick="switchTab(\'settings\');return false;" style="font-size:11px;color:var(--muted);text-decoration:underline;margin-left:8px">Edit in Settings</a>'
       +'</div>'
       +'<div class="payable" id="py-'+bid+'">Amount payable to shop: ₹'+fmt(payable)+'</div>'
       +'<div class="paybreak" id="pyb-'+bid+'">'+breakTxt+'</div>'
@@ -2250,13 +2208,12 @@ function renderShops(){
 
     // Phone + report actions
     inner+='<div class="shop-actions">'
-      +'<div class="phone-input-wrap">'
-        +'<label>📱 WhatsApp No.</label>'
-        +'<input type="tel" placeholder="91XXXXXXXXXX" id="ph-'+bid+'" value="'+(SHOP_PHONES[brand]||'')+'" oninput="SHOP_PHONES[\''+brand.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\']=(this.value)" style="width:140px">'
+      +'<div class="phone-input-wrap" style="align-items:center">'
+        +'<span style="font-size:12px;color:var(--muted)">📱 '+(SHOP_PHONES[brand]?SHOP_PHONES[brand]:'<a href="#" onclick="switchTab(\'settings\');return false;" style="color:var(--primary)">Set in Settings</a>')+'</span>'
       +'</div>'
       +'<button class="btn-pdf" onclick="genPDF(\''+brand.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">📄 Download PDF</button>'
       +'<button class="btn-wa" id="wa-'+bid+'" onclick="sendWA(\''+brand.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+"','"+bid+'\')" '
-        +'title="Enter WhatsApp number first">💬 Send to WhatsApp</button>'
+        +'title="Send report to WhatsApp">💬 Send to WhatsApp</button>'
     +'</div>';
     inner+='</div>'; // close sd
     card.innerHTML=inner;
@@ -2899,8 +2856,8 @@ function genPDF(brand){
 }
 
 function sendWA(brand, bid){
-  var phone = (document.getElementById('ph-'+bid).value||'').replace(/\D/g,'');
-  if(!phone){ alert('Please enter the WhatsApp number for '+brand+' first.'); return; }
+  var phone = (SHOP_PHONES[brand]||'').replace(/\D/g,'');
+  if(!phone){ showToast('No WhatsApp number saved for '+brand+'. Go to Settings → WhatsApp Numbers to add it.','warn'); switchTab('settings'); return; }
   var r = getShopReportData(brand);
 
   var lines = [];
