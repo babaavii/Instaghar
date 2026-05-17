@@ -843,7 +843,7 @@ code{font-family:'JetBrains Mono',monospace}
         <div class="met"><div class="ml">Gross Sales</div><div class="mv" id="mg">₹0</div></div>
         <div class="met"><div class="ml">Total Discount</div><div class="mv" id="mdi">₹0</div></div>
         <div class="met"><div class="ml">Net Billing</div><div class="mv g" id="mn">₹0</div></div>
-        <div class="met"><div class="ml">My Commission</div><div class="mv g" id="mc">₹0</div></div>
+        <div class="met"><div class="ml">My Commission</div><div class="mv g" id="mc">₹0</div><div style="font-size:11px;color:var(--muted);margin-top:2px" id="mc-pct">—% of net</div></div>
         <div class="met"><div class="ml">Orders</div><div class="mv" id="mo">0</div></div>
         <div class="met"><div class="ml">Items</div><div class="mv" id="mi">0</div></div>
         <div class="met"><div class="ml">Shops</div><div class="mv" id="ms">0</div></div>
@@ -1484,7 +1484,7 @@ function processData(rows){
   TRANSFERS=[]; TF_CTR=0;
   REMOVALS=[];  RM_CTR=0;
   ADDITIONS=[];  AI_CTR=0;
-  CM={};
+  loadCommRates(); // restore saved rates — never wipe CM on CSV upload
 
   // Clear all adjustment tables visually
   ['tf-body','rm-body','ai-body'].forEach(function(id){
@@ -1616,12 +1616,17 @@ function recalcAll(){
   var totalNet=0, totalComm=0;
   allB.forEach(function(b){
     var an  = adj[b]||0;
-    var pct = CM[b]!==undefined ? CM[b] : 0;
+    var pct = getCMRate(b);
     totalNet  += an;
     totalComm += an*pct/100;
   });
   var mnEl=document.getElementById('mn'); if(mnEl) mnEl.textContent='₹'+fmt(totalNet);
   var mcEl=document.getElementById('mc'); if(mcEl) mcEl.textContent='₹'+fmt(totalComm);
+  var pctEl=document.getElementById('mc-pct');
+  if(pctEl){
+    var effPct = totalNet>0 ? (totalComm/totalNet*100).toFixed(1) : '0.0';
+    pctEl.textContent = effPct+'% of net billing';
+  }
   if(typeof updateAOV==='function') updateAOV();
 }
 
@@ -2054,8 +2059,7 @@ function renderShops(){
   sorted.forEach(function(brand,idx){
     var data=SD[brand]||{gross:0,disc:0,net:0,qty:0,orders:new Set(),prods:{}};
     var adjNet=adj[brand]||0;
-    if(CM[brand]===undefined)CM[brand]=0;
-    var pct=CM[brand], camt=adjNet*pct/100, payable=adjNet-camt;
+        var pct=CM[brand], camt=adjNet*pct/100, payable=adjNet-camt;
     var bid='b'+idx;
 
     // transfer adjustments for this shop
@@ -2420,7 +2424,7 @@ function getShopReportData(brand){
   var data  = SD[brand]||{gross:0,disc:0,net:0,qty:0,orders:new Set(),prods:{}};
   var adj   = adjTotals();
   var adjNet= adj[brand]||0;
-  var pct   = CM[brand]!==undefined ? CM[brand] : 0;
+  var pct   = getCMRate(brand);
   var camt  = adjNet*pct/100;
   var payable = adjNet - camt;
 
@@ -2955,7 +2959,7 @@ function genInstagharPDF(){
     totalAdjNet  += (adj[b]||0);
     totalItems   += d.qty;
     if(d.orders) d.orders.forEach(function(o){ totalOrders.add(o); });
-    var pct  = CM[b]!==undefined ? CM[b] : 0;
+    var pct  = getCMRate(b);
     var camt = (adj[b]||0) * pct/100;
     totalCommission += camt;
     totalPayable    += (adj[b]||0) - camt;
@@ -3075,7 +3079,7 @@ function genInstagharPDF(){
     var orders = (d.orders && d.orders.size) || 0;
     var csvNet = d.net || 0;
     var adjNet = adj[b] || 0;
-    var pct    = CM[b]!==undefined ? CM[b] : 0;
+    var pct    = getCMRate(b);
     var camt   = adjNet * pct / 100;
     var pay    = adjNet - camt;
 
@@ -3200,7 +3204,7 @@ function exportSummary(){
     var tfDed=TRANSFERS.filter(function(t){return t.from===b;}).reduce(function(s,t){return s+t.deduct;},0);
     var tfCrd=TRANSFERS.filter(function(t){return t.to===b;}).reduce(function(s,t){return s+t.credit;},0);
     var rmDed=REMOVALS.filter(function(r){return r.shop===b;}).reduce(function(s,r){return s+r.totalNet;},0);
-    var adjNet=adj[b]||0, pct=CM[b]||0, camt=adjNet*pct/100, pay=adjNet-camt;
+    var adjNet=adj[b]||0, pct=getCMRate(b), camt=adjNet*pct/100, pay=adjNet-camt;
     rows.push([b,d.orders.size,Math.round(d.net),Math.round(tfCrd-tfDed),Math.round(-rmDed),Math.round(adjNet),pct,Math.round(camt),Math.round(pay)]);
   });
   if(TRANSFERS.length>0){
@@ -3447,7 +3451,7 @@ function saveReportToCloud(){
   Array.from(allBrands).forEach(function(b){
     var d = SD[b] || {gross:0,disc:0,net:0,qty:0,orders:new Set(),prods:{}};
     var adjNet = adj[b] || 0;
-    var pct = CM[b]!==undefined ? CM[b] : 0;
+    var pct = getCMRate(b);
     var camt = adjNet * pct/100;
     var pay = adjNet - camt;
     totalGross += d.gross||0;
@@ -4061,7 +4065,7 @@ function buildCommGrid(){
   var brands = Object.keys(INV).sort();
   var html='';
   brands.forEach(function(b){
-    var pct = CM[b]!==undefined ? CM[b] : 0;
+    var pct = getCMRate(b);
     html+='<div class="comm-row">'
       +'<span title="'+b+'">'+( b.length>22?b.substring(0,20)+'…':b)+'</span>'
       +'<input type="number" value="'+pct+'" min="0" max="100" step="0.1" '
@@ -4099,6 +4103,18 @@ function loadCommRates(){
     var saved = JSON.parse(localStorage.getItem('ig_cm_rates')||'{}');
     if(saved && typeof saved==='object') CM = saved;
   }catch(e){}
+}
+
+// Case-insensitive, trim-tolerant CM lookup — handles CSV brand ≠ INV brand casing
+function getCMRate(brand){
+  if(!brand) return 0;
+  if(CM[brand] !== undefined) return CM[brand];
+  var bl = brand.toLowerCase().trim();
+  var keys = Object.keys(CM);
+  for(var i=0; i<keys.length; i++){
+    if(keys[i].toLowerCase().trim() === bl) return CM[keys[i]];
+  }
+  return 0;
 }
 
 // ═══════════════════════════════════════════
@@ -4414,7 +4430,7 @@ function loadSettlement(){
     allB.forEach(function(b){
       var d = SD[b]||{gross:0,disc:0,net:0,qty:0,orders:new Set()};
       var adjNet = adj[b]||0;
-      var pct = CM[b]!==undefined ? CM[b] : 0;
+      var pct = getCMRate(b);
       shops.push({
         name:b, gross:Math.round(d.gross||0), disc:Math.round(d.disc||0),
         csvNet:Math.round(d.net||0), adjNet:Math.round(adjNet),
